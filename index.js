@@ -38,7 +38,7 @@ let notes = [
   }
 ]
 
-app.get('/', (request, response) => {
+app.get('/info', (request, response) => {
   response.send(`
     <h1>Hello World!</h1>
     <h2>Usage: </h2>
