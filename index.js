@@ -1,14 +1,17 @@
 // 3.b stuff
-// cors, PORT = process.env.PORT || 3001, 
+// added cors, PORT = process.env.PORT || 3001, 
+// added fe server proxy
+// -> removed cors
+
 
 const express = require('express')
-const cors = require('cors')
+// const cors = require('cors')
 const app = express()
 app.use(express.static('dist'))
 
 // fe ja be toimivat eri porteissa -> blocked by cors
 // tämä voidaan ratkaista käyttämällä cors middlewarea
-app.use(cors())
+//app.use(cors())
 app.use(express.json())
 
 const requestLogger = (request, response, next) => {
