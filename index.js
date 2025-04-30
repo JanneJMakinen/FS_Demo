@@ -1,6 +1,7 @@
 // 3.c stuff
 // adding Mongo Database Atlas functionality
-// and changed app.get
+// some routes uses mogno, some not
+// added error handling
 
 require('dotenv').config()
 const express = require('express')
@@ -33,13 +34,15 @@ const requestLogger = (request, response, next) => {
   console.log('---');
   next()
 }
-app.use(requestLogger)
+
 app.use(express.static('dist'))
 app.use(express.json())
+app.use(requestLogger)
 
 //const password = process.argv[2]
 //const url = `mongodb+srv://fullstack:${password}@cluster0.xt6ms5e.mongodb.net/noteApp?retryWrites=true&w=majority&appName=Cluster0`
 
+// this one gets notes from be (this file)
 app.get('/info', (request, response) => {
   response.send(`
     <h1>Hello World!</h1>
@@ -52,86 +55,137 @@ app.get('/info', (request, response) => {
   )
 })
 
+// this one gets notes from be (this file)
 app.get('/api/benotes', (request, response) => {
+  console.log('app.get from notebackend')
   response.json(notes)
 })
 
+// uses mongo
 app.get('/api/notes', (request, response) => {
+  console.log('app.get from mongodb atlas')
   Note.find({}).then(notes => {
     response.json(notes)
   })
+  .catch(error => next(error))
 })
 
-app.get('/api/notes/:id', (request, response) => {
-  Note.findById(request.params.id).then(note => {
-    response.json(note)
-  })
+// uses mongo (with error handling)
+app.get('/api/notes/:id', (request, response, next) => {
+  console.log('app.get(api/note:id from mongo');
+  Note.findById(request.params.id)
+    .then(note => {
+      if (note) {
+        response.json(note)
+      } else {
+        console.log('mongo id not found')
+        response.status(404).end()
+      }
+    })
+    .catch(error => next(error))
 })
 
+// // uses mongo (with error handling) (old version)
 // app.get('/api/notes/:id', (request, response) => {
-//     const id = request.params.id
-//     const note = notes.find(note => note.id === id)
-//     if (note) {
+//   console.log('app.get(/api/notes/:id) from mongodb atlas')
+//   Note.findById(request.params.id)
+//     .then(note => {
+//       if (note) {
+//         console.log('note id found from mongo')
 //         response.json(note)
 //       } else {
+//         console.log('error -> note id NOT found from mongo')
 //         response.status(404).end()
 //       }
+//     })
+//     .catch(error => {
+//       console.log(error)
+//       response.status(400).send({ error: 'malformatted id' })
+//     })
 // })
 
-app.delete('/api/notes/:id', (request, response) => {
-    const id = request.params.id
-    notes = notes.filter(note => note.id !== id)
-  
-    response.status(204).end()
+// // uses mongo (no error handling)
+// app.get('/api/notes/:id', (request, response) => {
+//   console.log('app.get(/api/notes/:id) from mongodb atlas')
+//   Note.findById(request.params.id).then(note => {
+//     response.json(note)
+//   })
+// })
+
+// uses mongo
+app.delete('/api/notes/:id', (request, response, next) => {
+  Note.findByIdAndDelete(request.params.id)
+    .then(result => {
+      response.status(204).end()
+    })
+    .catch(error => next(error))
 })
 
-const generateId = () => {
-  const maxId = notes.length > 0
-    ? Math.max(...notes.map(n => Number(n.id)))
-    : 0
-  return String(maxId + 1)
-}
+// this one deletes notes from be (this file)
+// app.delete('/api/notes/:id', (request, response) => {
+//     console.log('app.delete(/api/notes/:id) to mongodb atlas')
+//     const id = request.params.id
+//     notes = notes.filter(note => note.id !== id)
+  
+//     response.status(204).end()
+// })
 
-app.post('/api/notes', (request, response) => {
+// uses mongo
+app.post('/api/notes', (request, response, next) => {
+  console.log('app.post(/api/notes) to mongodb atlas')
   const body = request.body
-
-  if (!body.content) {
-    return response.status(400).json({ error: 'content missing' })
-  }
 
   const note = new Note({
     content: body.content,
     important: body.important || false,
   })
 
-  note.save().then(savedNote => {
-    response.json(savedNote)
-  })
+  note.save()
+    .then(savedNote => {
+      response.json(savedNote)
+    })
+    .catch(error => next(error))
 })
 
-// app.post('/api/notes', (request, response) => {
-//   const body = request.body
+// uses mongo
+app.put('/api/notes/:id', (request, response, next) => {
+  const { content, important } = request.body
 
-//   if (!body.content) {
-//     return response.status(400).json({
-//       error: 'content missing'
-//     })
-//   }
+  Note.findById(request.params.id)
+    .then(note => {
+      if (!note) {
+        return response.status(404).end()
+      }
 
-//   const note = {
-//     content: body.content,
-//     important: body.important || false,
-//     id: generateId(),
-//   }
+      note.content = content
+      note.important = important
 
-//   notes = notes.concat(note)
-//   response.json(note)
-// })
+      return note.save().then((updatedNote) => {
+        response.json(updatedNote)
+      })
+    })
+    .catch(error => next(error))
+})
 
 const unknownEndpoint = (request, response) => {
   response.status(404).send({ error: 'unknown endpoint' })
 }
 app.use(unknownEndpoint)
+
+const errorHandler = (error, request, response, next) => {
+  console.error(error.message)
+
+  if (error.name === 'CastError') {
+    return response.status(400).send({ error: 'malformatted id' })
+  } else if (error.name === 'ValidationError') {
+    return response.status(400).json({ error: error.message })
+  }
+
+  next(error)
+}
+
+// tämä tulee kaikkien muiden middlewarejen ja routejen rekisteröinnin jälkeen!
+app.use(errorHandler)
 
 console.log(process.env.MONGO_URI)
 
